@@ -1,4 +1,5 @@
 use javy::Runtime;
+//use javy::quickjs::JS_EnableObserve;
 use once_cell::sync::OnceCell;
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr::copy_nonoverlapping;

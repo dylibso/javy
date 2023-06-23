@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Error, Result};
 use binaryen::{CodegenConfig, Module};
-use std::path::Path;
+use std::{path::Path};
 use wizer::Wizer;
 
 pub(crate) struct Optimizer<'a> {
@@ -21,8 +21,10 @@ impl<'a> Optimizer<'a> {
     }
 
     pub fn write_optimized_wasm(self, dest: impl AsRef<Path>) -> Result<(), Error> {
+        println!("wtf");
         let mut wasm = Wizer::new()
             .allow_wasi(true)?
+            .allow_namespace("dylibso_observe")
             .inherit_stdio(true)
             .wasm_bulk_memory(true)
             .run(self.wasm)

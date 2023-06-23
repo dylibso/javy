@@ -9,6 +9,7 @@ extern "C" {
     pub fn JS_BigIntSigned(ctx: *mut JSContext, val: JSValue) -> i32;
     pub fn JS_BigIntToInt64(ctx: *mut JSContext, plen: *mut i64, val: JSValue) -> i32;
     pub fn JS_BigIntToUint64(ctx: *mut JSContext, plen: *mut u64, val: JSValue) -> i32;
+    //pub fn JS_EnableObserve();
     pub static ext_js_null: JSValue;
     pub static ext_js_undefined: JSValue;
     pub static ext_js_false: JSValue;

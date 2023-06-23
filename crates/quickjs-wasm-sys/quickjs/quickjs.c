@@ -48,6 +48,11 @@
 #include "libbf.h"
 #endif
 
+#define IMPORT(a, b) __attribute__((import_module(a), import_name(b)))
+
+IMPORT("dylibso_observe", "instrument_span_enter") extern void instrument_enter(uint64_t, uint64_t);
+IMPORT("dylibso_observe", "instrument_span_exit") extern void instrument_exit(uint64_t, uint64_t);
+
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(EMSCRIPTEN)
@@ -3967,6 +3972,30 @@ JSValue JS_NewAtomString(JSContext *ctx, const char *str)
     JSValue val = JS_AtomToString(ctx, atom);
     JS_FreeAtom(ctx, atom);
     return val;
+}
+
+void JS_InstrumentEnter(JSContext *ctx, JSValue func_obj)
+{
+  size_t plen;
+  const char* str;
+  JSValue name = JS_GetPropertyStr(ctx, func_obj, "name");
+  str = JS_ToCStringLen(ctx, &plen, name);
+  uintptr_t ptr = (uintptr_t) str;
+  uint64_t uint64_ptr = (uint64_t)ptr;
+  uint64_t uint64_length = (uint64_t)plen;
+  instrument_enter(uint64_ptr, uint64_length);
+}
+
+void JS_InstrumentExit(JSContext *ctx, JSValue func_obj)
+{
+  size_t plen;
+  const char* str;
+  JSValue name = JS_GetPropertyStr(ctx, func_obj, "name");
+  str = JS_ToCStringLen(ctx, &plen, name);
+  uintptr_t ptr = (uintptr_t) str;
+  uint64_t uint64_ptr = (uint64_t)ptr;
+  uint64_t uint64_length = (uint64_t)plen;
+  instrument_enter(uint64_ptr, uint64_length);
 }
 
 /* return (NULL, 0) if exception. */
@@ -16195,11 +16224,25 @@ typedef enum {
 #define FUNC_RET_YIELD      1
 #define FUNC_RET_YIELD_STAR 2
 
+// // using volatile is something i learned from microcontroller days
+// // i'm using this because the compiler seems to think this won't change
+// // and optimizes it away. Perhaps there is a better way to do this
+// static volatile int enableJsObserve = 1;
+
+// static void JS_EnableObserve() {
+//   enableJsObserve = 1;
+// }
+
+// int jsObserveEnabled() {
+//     return enableJsObserve != 0;
+// }
+
 /* argv[] is modified if (flags & JS_CALL_FLAG_COPY_ARGV) = 0. */
 static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                                JSValueConst this_obj, JSValueConst new_target,
                                int argc, JSValue *argv, int flags)
 {
+
     JSRuntime *rt = caller_ctx->rt;
     JSContext *ctx;
     JSObject *p;
@@ -16233,8 +16276,9 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 #define BREAK           SWITCH(pc)
 #endif
 
-    if (js_poll_interrupts(caller_ctx))
+    if (js_poll_interrupts(caller_ctx)) {
         return JS_EXCEPTION;
+    }
     if (unlikely(JS_VALUE_GET_TAG(func_obj) != JS_TAG_OBJECT)) {
         if (flags & JS_CALL_FLAG_GENERATOR) {
             JSAsyncFunctionState *s = JS_VALUE_GET_PTR(func_obj);
@@ -16269,6 +16313,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
         not_a_function:
             return JS_ThrowTypeError(caller_ctx, "not a function");
         }
+
         return call_func(caller_ctx, func_obj, this_obj, argc,
                          (JSValueConst *)argv, flags);
     }
@@ -16282,8 +16327,9 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 
     alloca_size = sizeof(JSValue) * (arg_allocated_size + b->var_count +
                                      b->stack_size);
-    if (js_check_stack_overflow(rt, alloca_size))
+    if (js_check_stack_overflow(rt, alloca_size)) {
         return JS_ThrowStackOverflow(caller_ctx);
+    }
 
     sf->js_mode = b->js_mode;
     arg_buf = argv;
@@ -16640,8 +16686,11 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             has_call_argc:
                 call_argv = sp - call_argc;
                 sf->cur_pc = pc;
+
+                JS_InstrumentEnter(ctx, call_argv[-1]);
                 ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
                                           JS_UNDEFINED, call_argc, call_argv, 0);
+                JS_InstrumentExit(ctx, call_argv[-1]);
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
                 if (opcode == OP_tail_call)
@@ -16676,8 +16725,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 pc += 2;
                 call_argv = sp - call_argc;
                 sf->cur_pc = pc;
+                JS_InstrumentEnter(ctx, call_argv[-1]);
                 ret_val = JS_CallInternal(ctx, call_argv[-1], call_argv[-2],
                                           JS_UNDEFINED, call_argc, call_argv, 0);
+                JS_InstrumentExit(ctx, call_argv[-1]);
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
                 if (opcode == OP_tail_call_method)
@@ -16818,8 +16869,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                     ret_val = JS_EvalObject(ctx, JS_UNDEFINED, obj,
                                             JS_EVAL_TYPE_DIRECT, scope_idx);
                 } else {
+                    JS_InstrumentEnter(ctx, call_argv[-1]);
                     ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
                                               JS_UNDEFINED, call_argc, call_argv, 0);
+                    JS_InstrumentExit(ctx, call_argv[-1]);
                 }
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
@@ -18660,6 +18713,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
         }
     }
  exception:
+    
     if (is_backtrace_needed(ctx, rt->current_exception)) {
         /* add the backtrace information now (it is not done
            before if the exception happens in a bytecode
@@ -18696,6 +18750,7 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
         sf->cur_pc = pc;
         sf->cur_sp = sp;
     } else {
+
     done:
         if (unlikely(!list_empty(&sf->var_ref_list))) {
             /* variable references reference the stack: must close them */
@@ -18713,15 +18768,20 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 JSValue JS_Call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_obj,
                 int argc, JSValueConst *argv)
 {
-    return JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
+    JS_InstrumentEnter(ctx, func_obj);
+    JSValue val = JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
                            argc, (JSValue *)argv, JS_CALL_FLAG_COPY_ARGV);
+    JS_InstrumentExit(ctx, func_obj);
+    return val;
 }
 
 static JSValue JS_CallFree(JSContext *ctx, JSValue func_obj, JSValueConst this_obj,
                            int argc, JSValueConst *argv)
 {
+    JS_InstrumentEnter(ctx, func_obj);
     JSValue res = JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
                                   argc, (JSValue *)argv, JS_CALL_FLAG_COPY_ARGV);
+    JS_InstrumentExit(ctx, func_obj);
     JS_FreeValue(ctx, func_obj);
     return res;
 }
@@ -18831,14 +18891,19 @@ static JSValue JS_CallConstructorInternal(JSContext *ctx,
 
     b = p->u.func.function_bytecode;
     if (b->is_derived_class_constructor) {
-        return JS_CallInternal(ctx, func_obj, JS_UNDEFINED, new_target, argc, argv, flags);
+        JS_InstrumentEnter(ctx, func_obj);
+        JSValue val = JS_CallInternal(ctx, func_obj, JS_UNDEFINED, new_target, argc, argv, flags);
+        JS_InstrumentExit(ctx, func_obj);
+        return val;
     } else {
         JSValue obj, ret;
         /* legacy constructor behavior */
         obj = js_create_from_ctor(ctx, new_target, JS_CLASS_OBJECT);
         if (JS_IsException(obj))
             return JS_EXCEPTION;
+        JS_InstrumentEnter(ctx, func_obj);
         ret = JS_CallInternal(ctx, func_obj, obj, new_target, argc, argv, flags);
+        JS_InstrumentExit(ctx, func_obj);
         if (JS_VALUE_GET_TAG(ret) == JS_TAG_OBJECT ||
             JS_IsException(ret)) {
             JS_FreeValue(ctx, obj);
@@ -18970,8 +19035,11 @@ static JSValue async_func_resume(JSContext *ctx, JSAsyncFunctionState *s)
 
     /* the tag does not matter provided it is not an object */
     func_obj = JS_MKPTR(JS_TAG_INT, s);
-    return JS_CallInternal(ctx, func_obj, s->this_val, JS_UNDEFINED,
+    JS_InstrumentEnter(ctx, func_obj);
+    JSValue val = JS_CallInternal(ctx, func_obj, s->this_val, JS_UNDEFINED,
                            s->argc, s->frame.arg_buf, JS_CALL_FLAG_GENERATOR);
+    JS_InstrumentExit(ctx, func_obj);
+    return val;
 }
 
 
