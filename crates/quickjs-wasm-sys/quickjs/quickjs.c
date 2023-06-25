@@ -424,8 +424,8 @@ struct JSContext {
     uint16_t binary_object_count;
     int binary_object_size;
 
-    size_t m_alloced;
-    size_t m_dealloced;
+    //size_t m_alloced;
+    //size_t m_dealloced;
 
     JSShape *array_shape;   /* initial shape for Array objects */
 
@@ -1332,7 +1332,7 @@ static void *js_bf_realloc(void *opaque, void *ptr, size_t size)
 /* Throw out of memory in case of error */
 void *js_malloc(JSContext *ctx, size_t size)
 {
-    ctx->m_alloced += size;
+    //ctx->m_alloced += size;
     void *ptr;
     ptr = js_malloc_rt(ctx->rt, size);
     if (unlikely(!ptr)) {
@@ -2166,8 +2166,8 @@ JSContext *JS_NewContext(JSRuntime *rt)
     if (!ctx)
         return NULL;
 
-    ctx->m_alloced = (size_t) 0;
-    ctx->m_dealloced = (size_t) 0;
+    //ctx->m_alloced = (size_t) 0;
+    //ctx->m_dealloced = (size_t) 0;
 
     JS_AddIntrinsicBaseObjects(ctx);
     JS_AddIntrinsicDate(ctx);
@@ -3986,8 +3986,11 @@ void JS_InstrumentEnter(JSContext *ctx, JSValue func_obj)
 {
   size_t plen;
   const char* str;
-  JSValue name = JS_GetPropertyStr(ctx, func_obj, "name");
-  str = JS_ToCStringLen(ctx, &plen, name);
+  JSValue fname = JS_GetPropertyStr(ctx, func_obj, "name");
+  JSValue constructor = JS_GetPropertyStr(ctx, func_obj, "constructor");
+  JS_DumpValue(ctx, fname);
+  JS_DumpValue(ctx, constructor);
+  str = JS_ToCStringLen(ctx, &plen, fname);
   uintptr_t ptr = (uintptr_t) str;
   uint64_t uint64_ptr = (uint64_t)ptr;
   uint64_t uint64_length = (uint64_t)plen;
