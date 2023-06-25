@@ -52,6 +52,7 @@
 
 IMPORT("dylibso_observe", "instrument_span_enter") extern void instrument_enter(uint64_t, uint64_t);
 IMPORT("dylibso_observe", "instrument_span_exit") extern void instrument_exit(uint64_t, uint64_t);
+//IMPORT("dylibso_observe", "instrument_statsd_write") extern void statsd_write(uint64_t, uint64_t);
 
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
@@ -422,6 +423,9 @@ struct JSContext {
 
     uint16_t binary_object_count;
     int binary_object_size;
+
+    size_t m_alloced;
+    size_t m_dealloced;
 
     JSShape *array_shape;   /* initial shape for Array objects */
 
@@ -1328,6 +1332,7 @@ static void *js_bf_realloc(void *opaque, void *ptr, size_t size)
 /* Throw out of memory in case of error */
 void *js_malloc(JSContext *ctx, size_t size)
 {
+    ctx->m_alloced += size;
     void *ptr;
     ptr = js_malloc_rt(ctx->rt, size);
     if (unlikely(!ptr)) {
@@ -2160,6 +2165,9 @@ JSContext *JS_NewContext(JSRuntime *rt)
     ctx = JS_NewContextRaw(rt);
     if (!ctx)
         return NULL;
+
+    ctx->m_alloced = (size_t) 0;
+    ctx->m_dealloced = (size_t) 0;
 
     JS_AddIntrinsicBaseObjects(ctx);
     JS_AddIntrinsicDate(ctx);
@@ -3995,7 +4003,7 @@ void JS_InstrumentExit(JSContext *ctx, JSValue func_obj)
   uintptr_t ptr = (uintptr_t) str;
   uint64_t uint64_ptr = (uint64_t)ptr;
   uint64_t uint64_length = (uint64_t)plen;
-  instrument_enter(uint64_ptr, uint64_length);
+  instrument_exit(uint64_ptr, uint64_length);
 }
 
 /* return (NULL, 0) if exception. */
@@ -33611,9 +33619,27 @@ static JSValue JS_EvalFunctionInternal(JSContext *ctx, JSValue fun_obj,
     return ret_val;
 }
 
+// void JS_WriteStats(JSContext *ctx)
+// {
+//    char str[100];
+//    snprintf(str, sizeof(str), "runtime.node.heap.malloced_memory:%zu|c", ctx->m_alloced);
+//    char* ptr = str;
+//    size_t length = strlen(ptr);
+
+//    uintptr_t uintptr = (uintptr_t)ptr;
+//    uint64_t pointerValue = (uint64_t)uintptr;
+//    uint64_t lengthValue = (uint64_t)length;
+
+//    statsd_write(pointerValue, lengthValue);
+// }
+
 JSValue JS_EvalFunction(JSContext *ctx, JSValue fun_obj)
 {
-    return JS_EvalFunctionInternal(ctx, fun_obj, ctx->global_obj, NULL, NULL);
+    JS_InstrumentEnter(ctx, fun_obj);
+    JSValue val = JS_EvalFunctionInternal(ctx, fun_obj, ctx->global_obj, NULL, NULL);
+    JS_InstrumentExit(ctx, fun_obj);
+    //JS_WriteStats(ctx);
+    return val;
 }
 
 static void skip_shebang(JSParseState *s)
