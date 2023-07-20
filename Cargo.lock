@@ -3133,6 +3133,7 @@ dependencies = [
 [[package]]
 name = "wizer"
 version = "1.6.1-beta.4"
+source = "git+https://github.com/dylibso/wizer?branch=allow-functions-from-given-namespace#cd1d7e18fc25946f294a30de04fee9d8f5708871"
 dependencies = [
  "anyhow",
  "cap-std 0.24.4",

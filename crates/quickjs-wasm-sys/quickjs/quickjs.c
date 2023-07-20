@@ -50,8 +50,8 @@
 
 #define IMPORT(a, b) __attribute__((import_module(a), import_name(b)))
 
-IMPORT("dylibso_observe", "instrument_span_enter") extern void instrument_enter(uint64_t, uint64_t);
-IMPORT("dylibso_observe", "instrument_span_exit") extern void instrument_exit(uint64_t, uint64_t);
+//IMPORT("dylibso_observe", "instrument_span_enter") extern void instrument_enter(uint64_t, uint64_t);
+//IMPORT("dylibso_observe", "instrument_span_exit") extern void instrument_exit(uint64_t, uint64_t);
 //IMPORT("dylibso_observe", "instrument_statsd_write") extern void statsd_write(uint64_t, uint64_t);
 
 #define OPTIMIZE         1
