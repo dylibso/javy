@@ -39,7 +39,7 @@ tempfile = "3.4.0"
 
 [build-dependencies]
 anyhow = "1.0.71"
-wizer = { path = "/Users/ben/Code/wizer/" }
+wizer = { git = "https://github.com/dylibso/wizer", branch = "allow-functions-from-given-namespace" }
 
 [[bench]]
 name = "benchmark"
