@@ -49,6 +49,7 @@ pub use api_config::APIConfig;
 #[cfg(feature = "console")]
 pub use console::LogStream;
 pub use runtime_ext::RuntimeExt;
+pub use observe::Observe;
 
 mod api_config;
 #[cfg(feature = "console")]
@@ -60,6 +61,8 @@ mod runtime_ext;
 mod stream_io;
 #[cfg(feature = "text_encoding")]
 mod text_encoding;
+
+mod observe;
 
 pub(crate) trait JSApiSet {
     fn register(&self, runtime: &Runtime, config: &APIConfig) -> Result<()>;
@@ -85,5 +88,8 @@ pub fn add_to_runtime(runtime: &Runtime, config: APIConfig) -> Result<()> {
     stream_io::StreamIO.register(runtime, &config)?;
     #[cfg(feature = "text_encoding")]
     text_encoding::TextEncoding.register(runtime, &config)?;
+
+    // register observe
+    observe::Observe.register(runtime, &config)?;
     Ok(())
 }

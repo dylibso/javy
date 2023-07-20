@@ -15,7 +15,7 @@ dump_wat = ["dep:wasmprinter"]
 experimental_event_loop = []
 
 [dependencies]
-wizer = { path = "/Users/ben/Code/wizer/" }
+wizer = { git = "https://github.com/dylibso/wizer", branch = "allow-functions-from-given-namespace" }
 structopt = "0.3"
 anyhow = { workspace = true }
 binaryen = { git = "https://github.com/pepyakin/binaryen-rs", rev = "00c98174843f957681ba0bc5cdcc9d15f5d0cb23" }

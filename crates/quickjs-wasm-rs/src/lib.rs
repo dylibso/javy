@@ -66,8 +66,6 @@ mod js_binding;
 mod js_value;
 mod serialize;
 
-//pub use quickjs_wasm_sys::JS_EnableObserve;
-
 pub use crate::js_binding::context::JSContextRef;
 pub use crate::js_binding::error::JSError;
 pub use crate::js_binding::exception::Exception;

@@ -1,3 +1,10 @@
+class Span {
+  spanContext() {
+    return { traceId: "mytraceid", spanId: "myspanid" }
+  }
+}
+
+
 function fibonacci(num) {
   var a = 1, b = 0, temp;
 
@@ -8,6 +15,7 @@ function fibonacci(num) {
     num--;
   }
 
+  __dylibso_observe_instrument_span_record(new Span())
   return b;
 }
 

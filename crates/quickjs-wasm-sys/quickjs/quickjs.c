@@ -3982,22 +3982,31 @@ JSValue JS_NewAtomString(JSContext *ctx, const char *str)
     return val;
 }
 
-void JS_InstrumentEnter(JSContext *ctx, JSValue func_obj)
+void JS_InstrumentSpanEnter(JSContext *ctx, JSValue func_obj)
 {
-  size_t plen;
-  const char* str;
   JSValue fname = JS_GetPropertyStr(ctx, func_obj, "name");
-  JSValue constructor = JS_GetPropertyStr(ctx, func_obj, "constructor");
-  JS_DumpValue(ctx, fname);
-  JS_DumpValue(ctx, constructor);
-  str = JS_ToCStringLen(ctx, &plen, fname);
-  uintptr_t ptr = (uintptr_t) str;
+  JSValue constructor = JS_GetProperty(ctx, func_obj, JS_ATOM_constructor);
+  JSValue cname = JS_GetPropertyStr(ctx, constructor, "name");
+
+  const char* fnamestr;
+  size_t fnamelen;
+  fnamestr = JS_ToCStringLen(ctx, &fnamelen, fname);
+
+  const char* cnamestr;
+  size_t cnamelen;
+  cnamestr = JS_ToCStringLen(ctx, &cnamelen, cname);
+
+  char name[256];
+  strcpy(name, cnamestr);  // Copy str1 into result
+  strcat(name, "#");   // Add a space to result
+  strcat(name, fnamestr);  // Concatenate str2 to result
+  uintptr_t ptr = (uintptr_t) name;
   uint64_t uint64_ptr = (uint64_t)ptr;
-  uint64_t uint64_length = (uint64_t)plen;
-  instrument_enter(uint64_ptr, uint64_length);
+  uint64_t uint64_length = (uint64_t) (cnamelen + fnamelen + 1);
+  //instrument_enter(uint64_ptr, uint64_length);
 }
 
-void JS_InstrumentExit(JSContext *ctx, JSValue func_obj)
+void JS_InstrumentSpanExit(JSContext *ctx, JSValue func_obj)
 {
   size_t plen;
   const char* str;
@@ -4006,7 +4015,7 @@ void JS_InstrumentExit(JSContext *ctx, JSValue func_obj)
   uintptr_t ptr = (uintptr_t) str;
   uint64_t uint64_ptr = (uint64_t)ptr;
   uint64_t uint64_length = (uint64_t)plen;
-  instrument_exit(uint64_ptr, uint64_length);
+  //instrument_exit(uint64_ptr, uint64_length);
 }
 
 /* return (NULL, 0) if exception. */
@@ -16698,10 +16707,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 call_argv = sp - call_argc;
                 sf->cur_pc = pc;
 
-                JS_InstrumentEnter(ctx, call_argv[-1]);
+                JS_InstrumentSpanEnter(ctx, call_argv[-1]);
                 ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
                                           JS_UNDEFINED, call_argc, call_argv, 0);
-                JS_InstrumentExit(ctx, call_argv[-1]);
+                JS_InstrumentSpanExit(ctx, call_argv[-1]);
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
                 if (opcode == OP_tail_call)
@@ -16736,10 +16745,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 pc += 2;
                 call_argv = sp - call_argc;
                 sf->cur_pc = pc;
-                JS_InstrumentEnter(ctx, call_argv[-1]);
+                JS_InstrumentSpanEnter(ctx, call_argv[-1]);
                 ret_val = JS_CallInternal(ctx, call_argv[-1], call_argv[-2],
                                           JS_UNDEFINED, call_argc, call_argv, 0);
-                JS_InstrumentExit(ctx, call_argv[-1]);
+                JS_InstrumentSpanExit(ctx, call_argv[-1]);
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
                 if (opcode == OP_tail_call_method)
@@ -16880,10 +16889,10 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                     ret_val = JS_EvalObject(ctx, JS_UNDEFINED, obj,
                                             JS_EVAL_TYPE_DIRECT, scope_idx);
                 } else {
-                    JS_InstrumentEnter(ctx, call_argv[-1]);
+                    JS_InstrumentSpanEnter(ctx, call_argv[-1]);
                     ret_val = JS_CallInternal(ctx, call_argv[-1], JS_UNDEFINED,
                                               JS_UNDEFINED, call_argc, call_argv, 0);
-                    JS_InstrumentExit(ctx, call_argv[-1]);
+                    JS_InstrumentSpanExit(ctx, call_argv[-1]);
                 }
                 if (unlikely(JS_IsException(ret_val)))
                     goto exception;
@@ -18779,20 +18788,20 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
 JSValue JS_Call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_obj,
                 int argc, JSValueConst *argv)
 {
-    JS_InstrumentEnter(ctx, func_obj);
+    JS_InstrumentSpanEnter(ctx, func_obj);
     JSValue val = JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
                            argc, (JSValue *)argv, JS_CALL_FLAG_COPY_ARGV);
-    JS_InstrumentExit(ctx, func_obj);
+    JS_InstrumentSpanExit(ctx, func_obj);
     return val;
 }
 
 static JSValue JS_CallFree(JSContext *ctx, JSValue func_obj, JSValueConst this_obj,
                            int argc, JSValueConst *argv)
 {
-    JS_InstrumentEnter(ctx, func_obj);
+    JS_InstrumentSpanEnter(ctx, func_obj);
     JSValue res = JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
                                   argc, (JSValue *)argv, JS_CALL_FLAG_COPY_ARGV);
-    JS_InstrumentExit(ctx, func_obj);
+    JS_InstrumentSpanExit(ctx, func_obj);
     JS_FreeValue(ctx, func_obj);
     return res;
 }
@@ -18902,9 +18911,9 @@ static JSValue JS_CallConstructorInternal(JSContext *ctx,
 
     b = p->u.func.function_bytecode;
     if (b->is_derived_class_constructor) {
-        JS_InstrumentEnter(ctx, func_obj);
+        JS_InstrumentSpanEnter(ctx, func_obj);
         JSValue val = JS_CallInternal(ctx, func_obj, JS_UNDEFINED, new_target, argc, argv, flags);
-        JS_InstrumentExit(ctx, func_obj);
+        JS_InstrumentSpanExit(ctx, func_obj);
         return val;
     } else {
         JSValue obj, ret;
@@ -18912,9 +18921,9 @@ static JSValue JS_CallConstructorInternal(JSContext *ctx,
         obj = js_create_from_ctor(ctx, new_target, JS_CLASS_OBJECT);
         if (JS_IsException(obj))
             return JS_EXCEPTION;
-        JS_InstrumentEnter(ctx, func_obj);
+        JS_InstrumentSpanEnter(ctx, func_obj);
         ret = JS_CallInternal(ctx, func_obj, obj, new_target, argc, argv, flags);
-        JS_InstrumentExit(ctx, func_obj);
+        JS_InstrumentSpanExit(ctx, func_obj);
         if (JS_VALUE_GET_TAG(ret) == JS_TAG_OBJECT ||
             JS_IsException(ret)) {
             JS_FreeValue(ctx, obj);
@@ -19046,10 +19055,10 @@ static JSValue async_func_resume(JSContext *ctx, JSAsyncFunctionState *s)
 
     /* the tag does not matter provided it is not an object */
     func_obj = JS_MKPTR(JS_TAG_INT, s);
-    JS_InstrumentEnter(ctx, func_obj);
+    JS_InstrumentSpanEnter(ctx, func_obj);
     JSValue val = JS_CallInternal(ctx, func_obj, s->this_val, JS_UNDEFINED,
                            s->argc, s->frame.arg_buf, JS_CALL_FLAG_GENERATOR);
-    JS_InstrumentExit(ctx, func_obj);
+    JS_InstrumentSpanExit(ctx, func_obj);
     return val;
 }
 
@@ -33638,9 +33647,9 @@ static JSValue JS_EvalFunctionInternal(JSContext *ctx, JSValue fun_obj,
 
 JSValue JS_EvalFunction(JSContext *ctx, JSValue fun_obj)
 {
-    JS_InstrumentEnter(ctx, fun_obj);
+    JS_InstrumentSpanEnter(ctx, fun_obj);
     JSValue val = JS_EvalFunctionInternal(ctx, fun_obj, ctx->global_obj, NULL, NULL);
-    JS_InstrumentExit(ctx, fun_obj);
+    JS_InstrumentSpanExit(ctx, fun_obj);
     //JS_WriteStats(ctx);
     return val;
 }
