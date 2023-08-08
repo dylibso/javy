@@ -2,7 +2,7 @@
 ///
 /// Example usage:
 /// ```
-/// # use javy_apis::APIConfig;
+// # use javy_apis::APIConfig;
 /// let api_config = APIConfig::default();
 /// ```
 #[derive(Debug, Default)]

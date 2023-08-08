@@ -48,8 +48,8 @@ use javy::Runtime;
 pub use api_config::APIConfig;
 #[cfg(feature = "console")]
 pub use console::LogStream;
-pub use runtime_ext::RuntimeExt;
 pub use observe::Observe;
+pub use runtime_ext::RuntimeExt;
 
 mod api_config;
 #[cfg(feature = "console")]
@@ -90,6 +90,6 @@ pub fn add_to_runtime(runtime: &Runtime, config: APIConfig) -> Result<()> {
     text_encoding::TextEncoding.register(runtime, &config)?;
 
     // register observe
-    observe::Observe.register(runtime, &config)?;
+    //observe::Observe.register(runtime, &config)?;
     Ok(())
 }

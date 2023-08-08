@@ -48,11 +48,40 @@
 #include "libbf.h"
 #endif
 
+
+
+// dylibso observe stuff
+
 #define IMPORT(a, b) __attribute__((import_module(a), import_name(b)))
 
-//IMPORT("dylibso_observe", "instrument_span_enter") extern void instrument_enter(uint64_t, uint64_t);
-//IMPORT("dylibso_observe", "instrument_span_exit") extern void instrument_exit(uint64_t, uint64_t);
-//IMPORT("dylibso_observe", "instrument_statsd_write") extern void statsd_write(uint64_t, uint64_t);
+IMPORT("dylibso_observe", "metric")
+extern void _metric(uint32_t, uint64_t, uint32_t);
+// IMPORT("dylibso_observe", "log")
+// extern void _log(uint32_t, uint64_t, uint32_t);
+IMPORT("dylibso_observe", "span_enter")
+extern void _span_enter(uint64_t, uint32_t);
+IMPORT("dylibso_observe", "span_exit") extern void _span_exit();
+
+void span_enter(char *name) {
+  uint64_t uint64_ptr = (uint64_t)name;
+  uint32_t uint32_length = (uint32_t)(strlen(name));
+  _span_enter(uint64_ptr, uint32_length);
+}
+
+void span_exit() { _span_exit(); }
+
+void metric(char *metric) {
+  uint64_t uint64_ptr = (uint64_t)metric;
+  uint32_t uint32_length = (uint32_t)(strlen(metric));
+  _metric((uint64_t)1, uint64_ptr, uint32_length);
+}
+
+// void write_log(int level, char *msg) {
+//   uint64_t uint64_ptr = (uint64_t)msg;
+//   uint32_t uint32_length = (uint32_t)(strlen(msg));
+//   uint32_t uint32_level = (uint32_t)level;
+//   _log(uint32_level, uint64_ptr, uint32_length);
+// }
 
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
@@ -3997,25 +4026,25 @@ void JS_InstrumentSpanEnter(JSContext *ctx, JSValue func_obj)
   cnamestr = JS_ToCStringLen(ctx, &cnamelen, cname);
 
   char name[256];
-  strcpy(name, cnamestr);  // Copy str1 into result
-  strcat(name, "#");   // Add a space to result
-  strcat(name, fnamestr);  // Concatenate str2 to result
-  uintptr_t ptr = (uintptr_t) name;
-  uint64_t uint64_ptr = (uint64_t)ptr;
-  uint64_t uint64_length = (uint64_t) (cnamelen + fnamelen + 1);
-  //instrument_enter(uint64_ptr, uint64_length);
+  if (strcmp(cnamestr, "Function") != 0) {
+    strcpy(name, cnamestr);
+    strcat(name, "#");
+  }
+  strcat(name, fnamestr);
+  span_enter(name);
 }
 
 void JS_InstrumentSpanExit(JSContext *ctx, JSValue func_obj)
 {
-  size_t plen;
-  const char* str;
-  JSValue name = JS_GetPropertyStr(ctx, func_obj, "name");
-  str = JS_ToCStringLen(ctx, &plen, name);
-  uintptr_t ptr = (uintptr_t) str;
-  uint64_t uint64_ptr = (uint64_t)ptr;
-  uint64_t uint64_length = (uint64_t)plen;
+  // size_t plen;
+  // const char* str;
+  // JSValue name = JS_GetPropertyStr(ctx, func_obj, "name");
+  // str = JS_ToCStringLen(ctx, &plen, name);
+  // uintptr_t ptr = (uintptr_t) str;
+  // uint64_t uint64_ptr = (uint64_t)ptr;
+  // uint64_t uint64_length = (uint64_t)plen;
   //instrument_exit(uint64_ptr, uint64_length);
+  span_exit();
 }
 
 /* return (NULL, 0) if exception. */
@@ -18791,6 +18820,12 @@ JSValue JS_Call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_obj,
     JS_InstrumentSpanEnter(ctx, func_obj);
     JSValue val = JS_CallInternal(ctx, func_obj, this_obj, JS_UNDEFINED,
                            argc, (JSValue *)argv, JS_CALL_FLAG_COPY_ARGV);
+
+    JSMemoryUsage stats;
+    JS_ComputeMemoryUsage(ctx->rt, &stats);
+    char m[512];
+    sprintf(m, "runtime.quickjs.mem.heap_used:%" PRId64 "|c", stats.memory_used_size);
+    metric(m);
     JS_InstrumentSpanExit(ctx, func_obj);
     return val;
 }
